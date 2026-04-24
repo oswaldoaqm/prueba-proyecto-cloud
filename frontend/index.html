@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLOps Lite Platform</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #e2e8f0; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+  header { text-align: center; padding: 30px 0; border-bottom: 1px solid #334155; margin-bottom: 20px; }
+  header h1 { font-size: 2.2rem; background: linear-gradient(90deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  header p { color: #94a3b8; margin-top: 8px; }
+  .nav { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 25px; }
+  .nav button { padding: 10px 18px; border: none; border-radius: 8px; background: #1e293b; color: #cbd5e1; cursor: pointer; transition: all 0.2s; font-size: 0.95rem; }
+  .nav button:hover { background: #334155; }
+  .nav button.active { background: #3b82f6; color: white; }
+  .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #334155; }
+  .card h2 { font-size: 1.3rem; margin-bottom: 15px; color: #38bdf8; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; }
+  .kpi { background: #0f172a; padding: 18px; border-radius: 10px; text-align: center; border: 1px solid #334155; }
+  .kpi .value { font-size: 1.8rem; font-weight: bold; color: #34d399; }
+  .kpi .label { font-size: 0.85rem; color: #94a3b8; margin-top: 5px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #334155; }
+  th { color: #94a3b8; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; }
+  tr:hover { background: #0f172a; }
+  .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+  .badge-produccion { background: #064e3b; color: #34d399; }
+  .badge-staging { background: #78350f; color: #fbbf24; }
+  .badge-retirado { background: #450a0a; color: #f87171; }
+  .badge-en_entrenamiento { background: #1e3a8a; color: #60a5fa; }
+  input, select, button.action { padding: 10px 14px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #e2e8f0; font-size: 0.95rem; }
+  button.action { background: #3b82f6; border: none; cursor: pointer; }
+  button.action:hover { background: #2563eb; }
+  button.action:disabled { background: #475569; cursor: not-allowed; }
+  .form-group { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; align-items: center; }
+  .result-box { background: #0f172a; padding: 15px; border-radius: 8px; margin-top: 15px; border-left: 4px solid #34d399; }
+  .loading { color: #94a3b8; font-style: italic; }
+  .error { color: #f87171; }
+  .chart-bar { height: 20px; background: #3b82f6; border-radius: 4px; margin-top: 4px; transition: width 0.5s ease; }
+  .hidden { display: none; }
+  .pagination { display: flex; gap: 10px; justify-content: center; margin-top: 15px; }
+  .pagination button { padding: 6px 14px; background: #334155; border: none; color: white; border-radius: 6px; cursor: pointer; }
+  .pagination button:disabled { background: #1e293b; color: #64748b; cursor: not-allowed; }
+  .pagination span { padding: 6px 14px; color: #94a3b8; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>⚡ MLOps Lite Platform</h1>
+    <p>Feature Store · Model Registry · Prediction Monitoring</p>
+  </header>
+
+  <nav class="nav">
+    <button onclick="showTab('dashboard')" class="active" id="btn-dashboard">Dashboard</button>
+    <button onclick="showTab('features')" id="btn-features">Feature Catalog</button>
+    <button onclick="showTab('models')" id="btn-models">Model Registry</button>
+    <button onclick="showTab('predict')" id="btn-predict">Simulador</button>
+    <button onclick="showTab('logs')" id="btn-logs">Logs</button>
+    <button onclick="showTab('analytics')" id="btn-analytics">Analytics</button>
+  </nav>
+
+  <!-- DASHBOARD -->
+  <div id="tab-dashboard" class="tab-content">
+    <div class="grid" id="kpi-container">
+      <div class="kpi"><div class="value loading">...</div><div class="label">Datasets</div></div>
+      <div class="kpi"><div class="value loading">...</div><div class="label">Modelos</div></div>
+      <div class="kpi"><div class="value loading">...</div><div class="label">Predicciones</div></div>
+      <div class="kpi"><div class="value loading">...</div><div class="label">Avg Accuracy</div></div>
+    </div>
+    <div class="card">
+      <h2>🏆 Top 5 Modelos por Accuracy</h2>
+      <div id="top-models"><p class="loading">Cargando...</p></div>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <div id="tab-features" class="tab-content hidden">
+    <div class="card">
+      <h2>📊 Catálogo de Features</h2>
+      <div class="form-group">
+        <select id="feature-filter" onchange="featurePage=0;loadFeatures()">
+          <option value="">Todos los tipos</option>
+          <option value="numerico">Numérico</option>
+          <option value="categorico">Categórico</option>
+          <option value="texto">Texto</option>
+          <option value="fecha">Fecha</option>
+        </select>
+      </div>
+      <div id="features-table"></div>
+      <div class="pagination">
+        <button id="feat-prev" onclick="featurePage--;loadFeatures()">Anterior</button>
+        <span id="feat-page">Página 1</span>
+        <button id="feat-next" onclick="featurePage++;loadFeatures()">Siguiente</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODELS -->
+  <div id="tab-models" class="tab-content hidden">
+    <div class="card">
+      <h2>🤖 Model Registry</h2>
+      <div class="form-group">
+        <select id="model-filter-fw" onchange="modelPage=0;loadModels()">
+          <option value="">Todos los frameworks</option>
+          <option value="PyTorch">PyTorch</option>
+          <option value="TensorFlow">TensorFlow</option>
+          <option value="Scikit-learn">Scikit-learn</option>
+          <option value="XGBoost">XGBoost</option>
+          <option value="LightGBM">LightGBM</option>
+        </select>
+        <select id="model-filter-state" onchange="modelPage=0;loadModels()">
+          <option value="">Todos los estados</option>
+          <option value="produccion">Producción</option>
+          <option value="staging">Staging</option>
+          <option value="en_entrenamiento">Entrenamiento</option>
+          <option value="retirado">Retirado</option>
+        </select>
+      </div>
+      <div id="models-table"></div>
+      <div class="pagination">
+        <button id="mod-prev" onclick="modelPage--;loadModels()">Anterior</button>
+        <span id="mod-page">Página 1</span>
+        <button id="mod-next" onclick="modelPage++;loadModels()">Siguiente</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PREDICT -->
+  <div id="tab-predict" class="tab-content hidden">
+    <div class="card">
+      <h2>🔮 Simulador de Inferencia</h2>
+      <div class="form-group">
+        <label>Modelo ID:</label>
+        <input type="number" id="predict-model-id" value="1" min="1" max="1000">
+      </div>
+      <div class="form-group">
+        <label>Edad:</label>
+        <input type="number" id="predict-edad" value="30">
+        <label>Ingreso:</label>
+        <input type="number" id="predict-ingreso" value="3500">
+        <label>Antigüedad (meses):</label>
+        <input type="number" id="predict-antiguedad" value="24">
+      </div>
+      <button class="action" onclick="runPrediction()">Ejecutar Predicción</button>
+      <div id="predict-result"></div>
+    </div>
+  </div>
+
+  <!-- LOGS -->
+  <div id="tab-logs" class="tab-content hidden">
+    <div class="card">
+      <h2>📋 Logs de Predicción</h2>
+      <div class="form-group">
+        <label>Modelo ID:</label>
+        <input type="number" id="logs-model-id" value="1">
+        <button class="action" onclick="logsPage=0;loadLogs()">Buscar Logs</button>
+      </div>
+      <div id="logs-table"></div>
+      <div class="pagination">
+        <button id="log-prev" onclick="logsPage--;loadLogs()">Anterior</button>
+        <span id="log-page">Página 1</span>
+        <button id="log-next" onclick="logsPage++;loadLogs()">Siguiente</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ANALYTICS -->
+  <div id="tab-analytics" class="tab-content hidden">
+    <div class="card">
+      <h2>📈 Analytics: Frameworks vs Accuracy</h2>
+      <div id="frameworks-chart"><p class="loading">Cargando...</p></div>
+    </div>
+    <div class="card">
+      <h2>📉 Data Drift (últimos meses)</h2>
+      <div id="drift-table"><p class="loading">Cargando...</p></div>
+    </div>
+    <div class="card">
+      <h2>🔥 Top Modelos por Volumen (7 días)</h2>
+      <div id="top-volume"><p class="loading">Cargando...</p></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = {
+  ms1: "http://localhost:8001",
+  ms2: "http://localhost:8002",
+  ms3: "http://localhost:8003",
+  ms4: "http://localhost:8004",
+  ms5: "http://localhost:8005"
+};
+
+let featurePage = 0;
+let modelPage = 0;
+let logsPage = 0;
+const PAGE_SIZE = 15;
+
+function showTab(id) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.getElementById('tab-' + id).classList.remove('hidden');
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + id).classList.add('active');
+  if (id === 'dashboard') loadDashboard();
+  if (id === 'features') loadFeatures();
+  if (id === 'models') loadModels();
+  if (id === 'analytics') loadAnalytics();
+}
+
+async function fetchJSON(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(r.statusText);
+    return await r.json();
+  } catch (e) {
+    console.error("Fetch error:", url, e);
+    return { error: e.message };
+  }
+}
+
+// ========== DASHBOARD ==========
+async function loadDashboard() {
+  const top = await fetchJSON(API.ms2 + '/modelos/top?limit=5');
+  
+  document.querySelector('#kpi-container').innerHTML = `
+    <div class="kpi"><div class="value">50</div><div class="label">Datasets</div></div>
+    <div class="kpi"><div class="value">1,000</div><div class="label">Modelos</div></div>
+    <div class="kpi"><div class="value">25,000</div><div class="label">Predicciones</div></div>
+    <div class="kpi"><div class="value">0.84</div><div class="label">Avg Accuracy</div></div>
+  `;
+
+  let html = '<table><tr><th>Modelo</th><th>Versión</th><th>Framework</th><th>Avg Accuracy</th></tr>';
+  if (Array.isArray(top) && top.length > 0) {
+    top.forEach(m => {
+      html += `<tr><td>${m.nombre_modelo || m.NombreModelo || '-'}</td><td>${m.version || m.Version || '-'}</td><td>${m.framework || m.Framework || '-'}</td><td>${(m.avg_accuracy || 0).toFixed(4)}</td></tr>`;
+    });
+  } else {
+    html += '<tr><td colspan="4" class="error">No se pudieron cargar los modelos</td></tr>';
+  }
+  html += '</table>';
+  document.getElementById('top-models').innerHTML = html;
+}
+
+// ========== FEATURES ==========
+async function loadFeatures() {
+  const tipo = document.getElementById('feature-filter').value;
+  const skip = featurePage * PAGE_SIZE;
+  let url = API.ms1 + `/features?limit=${PAGE_SIZE}&skip=${skip}`;
+  if (tipo) url += '&tipo=' + encodeURIComponent(tipo);
+  
+  const data = await fetchJSON(url);
+  let html = '<table><tr><th>ID</th><th>Variable</th><th>Tipo</th><th>Dataset ID</th><th>Estadísticas</th></tr>';
+  if (Array.isArray(data) && data.length > 0) {
+    data.forEach(f => {
+      const stats = f.estadisticas ? `μ=${(f.estadisticas.media || 0).toFixed(1)} σ=${(f.estadisticas.std || 0).toFixed(1)}` : '-';
+      html += `<tr><td>${f.feature_id}</td><td>${f.nombre_variable}</td><td>${f.tipo_dato}</td><td>${f.dataset_id}</td><td>${stats}</td></tr>`;
+    });
+  } else {
+    html += '<tr><td colspan="5" class="error">No hay features</td></tr>';
+  }
+  html += '</table>';
+  document.getElementById('features-table').innerHTML = html;
+  document.getElementById('feat-page').innerText = 'Página ' + (featurePage + 1);
+  document.getElementById('feat-prev').disabled = featurePage === 0;
+}
+
+// ========== MODELS ==========
+async function loadModels() {
+  const fw = document.getElementById('model-filter-fw').value;
+  const st = document.getElementById('model-filter-state').value;
+  const skip = modelPage * PAGE_SIZE;
+  let url = API.ms2 + `/modelos?limit=${PAGE_SIZE}&skip=${skip}`;
+  if (fw) url += '&framework=' + encodeURIComponent(fw);
+  if (st) url += '&estado=' + encodeURIComponent(st);
+  
+  const data = await fetchJSON(url);
+  let html = '<table><tr><th>ID</th><th>Nombre</th><th>Versión</th><th>Framework</th><th>Estado</th><th>Autor</th></tr>';
+  if (Array.isArray(data) && data.length > 0) {
+    data.forEach(m => {
+      const estado = m.estado || m.Estado || '';
+      const badgeClass = 'badge-' + estado;
+      html += `<tr><td>${m.modelo_id || m.ModeloID}</td><td>${m.nombre_modelo || m.NombreModelo}</td><td>${m.version || m.Version}</td><td>${m.framework || m.Framework}</td><td><span class="badge ${badgeClass}">${estado}</span></td><td>${m.autor || m.Autor || '-'}</td></tr>`;
+    });
+  } else {
+    html += '<tr><td colspan="6" class="error">Error cargando modelos o sin resultados</td></tr>';
+  }
+  html += '</table>';
+  document.getElementById('models-table').innerHTML = html;
+  document.getElementById('mod-page').innerText = 'Página ' + (modelPage + 1);
+  document.getElementById('mod-prev').disabled = modelPage === 0;
+}
+
+// ========== PREDICT ==========
+async function runPrediction() {
+  const modelo_id = parseInt(document.getElementById('predict-model-id').value);
+  const edad = parseInt(document.getElementById('predict-edad').value);
+  const ingreso = parseInt(document.getElementById('predict-ingreso').value);
+  const antiguedad = parseInt(document.getElementById('predict-antiguedad').value);
+  
+  const resDiv = document.getElementById('predict-result');
+  resDiv.innerHTML = '<p class="loading">Ejecutando...</p>';
+  
+  try {
+    const r = await fetch(API.ms4 + '/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelo_id, input_features: { edad, ingreso, antiguedad_meses: antiguedad } })
+    });
+    const data = await r.json();
+    if (r.ok) {
+      resDiv.innerHTML = `<div class="result-box">
+        <strong>✅ Predicción realizada</strong><br>
+        Modelo: <b>${data.modelo}</b> (ID: ${data.modelo_id})<br>
+        Request ID: ${data.request_id}<br>
+        Output: <b style="font-size:1.3rem;color:#34d399">${data.prediction}</b><br>
+        Latencia: ${data.latencia_ms}ms<br>
+        Log: ${data.log_status}
+      </div>`;
+    } else {
+      resDiv.innerHTML = `<div class="error">❌ Error: ${data.detail || JSON.stringify(data)}</div>`;
+    }
+  } catch (e) {
+    resDiv.innerHTML = `<div class="error">❌ Error de conexión: ${e.message}</div>`;
+  }
+}
+
+// ========== LOGS ==========
+async function loadLogs() {
+  const modelo_id = document.getElementById('logs-model-id').value;
+  const data = await fetchJSON(API.ms3 + `/logs/modelo/${modelo_id}?limit=${PAGE_SIZE}&page=${logsPage + 1}`);
+  
+  let html = '<table><tr><th>Log ID</th><th>Modelo</th><th>Predicción</th><th>Latencia</th><th>Timestamp</th></tr>';
+  if (data && Array.isArray(data.logs) && data.logs.length > 0) {
+    data.logs.forEach(l => {
+      const ts = l.timestamp ? new Date(l.timestamp).toLocaleString() : '-';
+      html += `<tr><td>${l.log_id}</td><td>${l.modelo_nombre}</td><td>${l.prediccion_output}</td><td>${l.latencia_ms}ms</td><td>${ts}</td></tr>`;
+    });
+    html += `</table><p style="margin-top:10px;color:#94a3b8">Total: ${data.total} registros</p>`;
+  } else {
+    html += '<tr><td colspan="5" class="error">Sin datos</td></tr></table>';
+  }
+  document.getElementById('logs-table').innerHTML = html;
+  document.getElementById('log-page').innerText = 'Página ' + (logsPage + 1);
+  document.getElementById('log-prev').disabled = logsPage === 0;
+}
+
+// ========== ANALYTICS ==========
+async function loadAnalytics() {
+  // Frameworks
+  const fw = await fetchJSON(API.ms5 + '/analytics/frameworks');
+  let html = '';
+  if (Array.isArray(fw) && fw.length > 0) {
+    const max = Math.max(...fw.map(x => x.avg_accuracy || 0));
+    fw.forEach(f => {
+      const pct = max > 0 ? ((f.avg_accuracy || 0) / max * 100).toFixed(1) : 0;
+      html += `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between"><span>${f.framework}</span><span>${(f.avg_accuracy || 0).toFixed(4)}</span></div><div class="chart-bar" style="width:${pct}%"></div><div style="font-size:0.8rem;color:#94a3b8">${f.total_modelos || 0} modelos · avg training ${(f.avg_training_time_sec || 0).toFixed(0)}s</div></div>`;
+    });
+  } else {
+    html = '<p class="error">No data</p>';
+  }
+  document.getElementById('frameworks-chart').innerHTML = html;
+
+  // Drift
+  const drift = await fetchJSON(API.ms5 + '/analytics/drift');
+  let dhtml = '<table><tr><th>Modelo</th><th>Framework</th><th>Mes</th><th>Promedio</th><th>Total</th></tr>';
+  if (Array.isArray(drift) && drift.length > 0) {
+    drift.slice(0, 20).forEach(d => {
+      dhtml += `<tr><td>${d.nombre_modelo}</td><td>${d.framework}</td><td>${d.mes}</td><td>${d.promedio_prediccion}</td><td>${d.total_predicciones}</td></tr>`;
+    });
+  } else {
+    dhtml += '<tr><td colspan="5" class="error">No data</td></tr>';
+  }
+  dhtml += '</table>';
+  document.getElementById('drift-table').innerHTML = dhtml;
+
+  // Top volume
+  const vol = await fetchJSON(API.ms5 + '/analytics/top-models');
+  let vhtml = '<table><tr><th>Modelo</th><th>Versión</th><th>Framework</th><th>Peticiones 7d</th><th>Latencia avg</th></tr>';
+  if (Array.isArray(vol) && vol.length > 0) {
+    vol.forEach(v => {
+      vhtml += `<tr><td>${v.nombre_modelo}</td><td>${v.version}</td><td>${v.framework}</td><td>${v.peticiones_7d}</td><td>${v.latencia_promedio_ms}ms</td></tr>`;
+    });
+  } else {
+    vhtml += '<tr><td colspan="5" class="error">No data</td></tr>';
+  }
+  vhtml += '</table>';
+  document.getElementById('top-volume').innerHTML = vhtml;
+}
+
+// Init
+loadDashboard();
+</script>
+</body>
+</html>

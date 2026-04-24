@@ -1,0 +1,173 @@
+version: '3.8'
+
+services:
+  # =================== DATABASES ===================
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: features
+    volumes:
+      - ./init-data/postgres:/docker-entrypoint-initdb.d
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - mlops-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d features"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: registry
+      MYSQL_USER: user
+      MYSQL_PASSWORD: pass
+    volumes:
+      - ./init-data/mysql:/docker-entrypoint-initdb.d
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - mlops-net
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "user", "-ppass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  mongo:
+    image: mongo:6-jammy
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpass
+      MONGO_INITDB_DATABASE: predictions
+    volumes:
+      - ./init-data/mongo:/docker-entrypoint-initdb.d
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - mlops-net
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # =================== MICROSERVICES ===================
+  ms1-feature-catalog:
+    build: ./ms1-feature-catalog
+    ports:
+      - "8001:8000"
+    environment:
+      DATABASE_URL: postgresql://user:pass@postgres:5432/features
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - mlops-net
+    restart: unless-stopped
+
+  ms2-model-registry:
+    build: ./ms2-model-registry
+    ports:
+      - "8002:8080"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: user
+      DB_PASSWORD: pass
+      DB_NAME: registry
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - mlops-net
+    restart: unless-stopped
+
+  ms3-prediction-logger:
+    build: ./ms3-prediction-logger
+    ports:
+      - "8003:3000"
+    environment:
+      MONGO_URI: mongodb://root:rootpass@mongo:27017/predictions?authSource=admin
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - mlops-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  ms4-inference-gateway:
+    build: ./ms4-inference-gateway
+    ports:
+      - "8004:8000"
+    environment:
+      MS2_URL: http://ms2-model-registry:8080
+      MS3_URL: http://ms3-prediction-logger:3000
+    depends_on:
+      ms2-model-registry:
+        condition: service_started
+      ms3-prediction-logger:
+        condition: service_healthy
+    networks:
+      - mlops-net
+    restart: unless-stopped
+
+  ms5-analytics:
+    build: ./ms5-analytics
+    ports:
+      - "8005:8000"
+    environment:
+      MS1_URL: http://ms1-feature-catalog:8000
+      MS2_URL: http://ms2-model-registry:8080
+      MS3_URL: http://ms3-prediction-logger:3000
+    depends_on:
+      ms1-feature-catalog:
+        condition: service_started
+      ms2-model-registry:
+        condition: service_started
+      ms3-prediction-logger:
+        condition: service_started
+    networks:
+      - mlops-net
+    restart: unless-stopped
+
+  # =================== FRONTEND ===================
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - ms1-feature-catalog
+      - ms2-model-registry
+      - ms3-prediction-logger
+      - ms4-inference-gateway
+      - ms5-analytics
+    networks:
+      - mlops-net
+
+volumes:
+  pg_data:
+  mysql_data:
+  mongo_data:
+
+networks:
+  mlops-net:
+    driver: bridge
