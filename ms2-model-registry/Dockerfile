@@ -1,11 +1,14 @@
-FROM golang:1.21-alpine AS builder
+# Etapa de construcción
+FROM maven:3.9-eclipse-temurin-17-alpine AS builder
 WORKDIR /app
-COPY go.mod main.go ./
-RUN go mod tidy
-RUN go build -o server .
+COPY pom.xml .
+RUN mvn dependency:go-offline
+COPY src ./src
+RUN mvn clean package -DskipTests
 
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-WORKDIR /root/
-COPY --from=builder /app/server .
-CMD ["./server"]
+# Etapa de ejecución
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+COPY --from=builder /app/target/*.jar app.jar
+EXPOSE 8080
+CMD ["java", "-jar", "app.jar"]
